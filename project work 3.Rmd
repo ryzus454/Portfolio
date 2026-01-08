@@ -1,0 +1,263 @@
+---
+title: "project work 3"
+author: "ryan kafuak"
+date: "10/09/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(readr)
+```
+```{r setup, include=FALSE}
+#load up NHIS datasets 
+Adult21<- read.csv("C:\\Users\\ryank\\Downloads\\adult21csv(2)\\adult21.csv")
+Adult20 <- read.csv("C:\\Users\\ryank\\Downloads\\adult20csv\\adult20.csv")
+Adult19 <- read.csv("c:\\Users\\ryank\\Downloads\\adult19csv (2)\\adult19csv\\adult19.csv")
+
+```
+```{r}
+Adult22 <- read.csv("C:\\Users\\ryank\\Downloads\\adult22csv\\adult22.csv")
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+#subset each dataset to the essential varrables needed for  merging. 
+Adult22subset <- subset(Adult22, select = c("SMKCIGST_A","AGEP_A","SEX_A","SRVY_YR","HISTOPCOST_A","RACEALLP_A"))
+Adult21subset <- subset(Adult21, select =c("SMKCIGST_A","AGEP_A","SEX_A","SRVY_YR","HISTOPCOST_A","RACEALLP_A"))
+Adult20subset <- subset(Adult20, select= c("SMKCIGST_A","AGEP_A","SEX_A","SRVY_YR","HISTOPCOST_A","RACEALLP_A"))
+Adult19subset <- subset(Adult19, select = c("SMKCIGST_A","AGEP_A","SEX_A","SRVY_YR","HISTOPCOST_A","RACEALLP_A"))
+
+```
+
+```{r}
+# merge into one cleaned column
+merged_dataset <- rbind(Adult22subset, Adult21subset, Adult20subset, Adult19subset)
+```
+```{r}
+summary(merged_dataset)
+```
+```{r}
+merged_dataset$AGE_GROUP <- cut(merged_dataset$AGEP_A, breaks = c(18, 44, 64, Inf), labels = c("18-44", "45-64", "65+"))
+```
+```{r}
+# create a new column called smoking status based off the smkcisg A colum n 
+merged_dataset$SMKSTATUS <- ifelse(merged_dataset$SMKCIGST_A == 4, "Never Smoked", 
+                                  ifelse(merged_dataset$SMKCIGST_A == 3, "Former smoker",
+                                         ifelse(merged_dataset$SMKCIGST_A == 1, "Everyday Smoker",
+                                                ifelse(merged_dataset$SMKCIGST_A == 2, "Rarely Smoked", NA))))
+```
+```{r}
+merged_dataset$SMKSTATUS <- factor(merged_dataset$SMKSTATUS, 
+                                  levels = c("Never Smoked" ,"Former smoker","Everyday Smoker", "Rarely Smoked" ))
+```
+```{r}
+merged_dataset$HISTOPCOST_A <- factor(merged_dataset$HISTOPCOST_A, 
+                              levels = c("1","2","7","8","9"))
+```
+```{r}
+merged_dataset$SMKCIGST_A <- factor(merged_dataset$SMKCIGST_A, 
+                              levels = c("1","2","3","4","5"))
+```
+```{r}
+merged_dataset$RACEALLP_A <- factor(merged_dataset$RACEALLP_A, 
+                              levels = c("1","2","3","4","5"))
+```
+```{r}
+df3<- na.omit(merged_dataset) 
+```
+```{r}
+# Use one-hot encoding (dummy variables)
+df3 <- merged_dataset %>%
+  mutate(HISTOPCOST_A = as.numeric(as.factor(HISTOPCOST_A)))
+
+
+```
+```{r}
+# Filter the dataset to remove rows with missing values in the predictors and target variable
+cleaned_dataset <- merged_dataset[!is.na(merged_dataset$SEX_A) & 
+                                  !is.na(merged_dataset$SMKCIGST_A) & 
+                                  !is.na(merged_dataset$RACEALLP_A) & 
+                                  !is.na(merged_dataset$HISTOPCOST_A), ]
+
+# Fit the model on the cleaned dataset
+smoking.glm <- glm(HISTOPCOST_A ~ SEX_A + SMKCIGST_A + RACEALLP_A,  family = binomial, data=cleaned_dataset)
+
+# Predict on the cleaned dataset
+predicted_probs <- predict(smoking.glm, newdata=cleaned_dataset, type = "response")
+
+# Threshold the probabilities at 0.5 to get predicted classes
+predicted_classes <- ifelse(predicted_probs > 0.5, 1, 0)
+
+# Check the lengths again
+print(paste("Length of predicted classes: ", length(predicted_classes)))
+print(paste("Length of actual values in cleaned dataset: ", length(cleaned_dataset$HISTOPCOST_A)))
+
+# Convert both to factors and compute the confusion matrix
+predicted_classes <- as.factor(predicted_classes)
+cleaned_dataset$HISTOPCOST_A <- as.factor(cleaned_dataset$HISTOPCOST_A)
+confusion <- confusionMatrix(predicted_classes, cleaned_dataset$HISTOPCOST_A)
+
+
+
+```
+
+```{r}
+# Fitting the logistic regression model
+smoking.glm <- glm(HISTOPCOST_A ~ SEX_A + SMKCIGST_A + RACEALLP_A,  family = binomial, data=cleaned_dataset)
+summary(smoking.glm)
+
+# Predicting probabilities on the dataset
+predicted_probs <- predict(smoking.glm, type = "response")
+
+# Thresholding at 0.5 to get predicted classes
+predicted_classes <- ifelse(predicted_probs > 0.5, 1, 0)
+
+# Loading required libraries
+library(caret)
+library(pROC)
+
+# Assuming you have already loaded your dataset into 'merged_dataset'
+
+# Fitting the logistic regression model
+smoking.glm <- glm(HISTOPCOST_A ~ SEX_A + SMKCIGST_A + RACEALLP_A,  family = binomial, data=cleaned_dataset)
+summary(smoking.glm)
+
+# Predicting probabilities on the dataset
+predicted_probs <- predict(smoking.glm, type = "response")
+
+# Thresholding at 0.5 to get predicted classes
+predicted_classes <- ifelse(predicted_probs > 0.5, 1, 0)
+
+# Loading required libraries
+library(caret)
+library(pROC)
+
+# Create a combined factor to capture all levels
+combined_factor <- factor(c(as.character(predicted_classes), as.character(cleaned_dataset$HISTOPCOST_A)))
+
+# Extract levels from the combined factor
+all_levels <- levels(combined_factor)
+
+# Set these levels for both predicted_classes and cleaned_dataset$HISTOPCOST_A
+predicted_classes <- factor(predicted_classes, levels = all_levels)
+cleaned_dataset$HISTOPCOST_A <- factor(cleaned_dataset$HISTOPCOST_A, levels = all_levels)
+
+# Now compute the confusion matrix
+confusion <- confusionMatrix(predicted_classes, cleaned_dataset$HISTOPCOST_A)
+
+
+# Extract metrics
+accuracy <- confusion$overall['Accuracy']
+precision <- confusion$byClass['Precision']
+recall <- confusion$byClass['Recall']
+F1 <- confusion$byClass['F1']
+
+# Compute ROC and AUC
+roc_obj <- roc(cleaned_dataset$HISTOPCOST_A, predicted_probs)
+auc_val <- auc(roc_obj)
+
+# Printing out the metrics
+print(paste("Accuracy: ", accuracy))
+print(paste("Precision: ", precision))
+print(paste("Recall: ", recall))
+print(paste("F1 Score: ", F1))
+print(paste("AUC: ", auc_val))
+
+
+# Extract metrics
+accuracy <- confusion$overall['Accuracy']
+precision <- confusion$byClass['Precision']
+recall <- confusion$byClass['Recall']
+F1 <- confusion$byClass['F1']
+
+# Compute ROC and AUC
+
+auc_val <- auc(roc_obj)
+
+# Printing out the metrics
+print(paste("Accuracy: ", accuracy))
+print(paste("Precision: ", precision))
+print(paste("Recall: ", recall))
+print(paste("F1 Score: ", F1))
+print(paste("AUC: ", auc_val))
+```
+
+```{r}
+
+# Load necessary libraries
+library(randomForest)
+library(caret)
+
+# Reload the data
+df <- read.csv("C:/Users/ryank/OneDrive/Documents/mergeredata.csv")
+df_clean <- na.omit(df)
+
+# Split data into training and test sets
+set.seed(123)
+splitIndex <- createDataPartition(df_clean$SMKSTATUS, p = 0.7, list = FALSE)
+trainData <- df_clean[splitIndex, ]
+testData <- df_clean[-splitIndex, ]
+
+# Preprocess the data
+X_train <- trainData %>% select(-SMKSTATUS)
+y_train <- trainData$SMKSTATUS
+X_train_encoded <- model.matrix(~ . - 1, data = X_train)
+
+X_test <- testData %>% select(-SMKSTATUS)
+y_test <- testData$SMKSTATUS
+X_test_encoded <- model.matrix(~ . - 1, data = X_test)
+
+# Ensure training and test data have the same columns
+missing_cols <- setdiff(colnames(X_train_encoded), colnames(X_test_encoded))
+for(col in missing_cols){
+  X_test_encoded[col] <- 0
+}
+X_test_encoded <- X_test_encoded[, colnames(X_train_encoded)]
+
+# Train the Random Forest model
+rf_model <- randomForest(x = X_train_encoded, y = as.factor(y_train), ntree = 100)
+
+# Predict on the test set
+predictions <- predict(rf_model, X_test_encoded)
+
+# Compute the metrics
+confusion <- confusionMatrix(predictions, as.factor(y_test))
+accuracy <- confusion$overall['Accuracy']
+
+
+list(report = confusion, accuracy = accuracy)
+
+# Extract feature importance
+feature_importance <- importance(rf_model)
+
+# Consolidate the results
+results <- list(
+  accuracy = as.numeric(accuracy),
+   feature_importance = feature_importance
+)
+
+results
+
+
+
+
+
+```
+```{r}
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
